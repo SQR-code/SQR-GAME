@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Square Off</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#eceee8; --surface:#f7f8f4; --ink:#1f2420; --muted:#5d655f; --line:#cfd3cb;
+  --board:#dcb67a; --board-edge:#c49d5f; --grid:#6b4f27;
+  --tok-b:#1c1c1f; --tok-b2:#4a4a52; --tok-w:#fbfaf6; --tok-w2:#d4cfc1; --pip-b:#f4f1e8; --pip-w:#1c1c1f;
+  --win:#c8321b; --accent:#2f45c4; --accent-ink:#ffffff; --hint:rgba(47,69,196,.55);
+  color-scheme: light; box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#161917; --surface:#202420; --ink:#e7eae5; --muted:#9aa29c; --line:#353b36;
+    --board:#b98f52; --board-edge:#9c7840; --grid:#3d2a12;
+    --tok-b:#121214; --tok-b2:#3c3c44; --tok-w:#f4f2ea; --tok-w2:#c9c4b5; --pip-b:#ece8dc; --pip-w:#121214;
+    --win:#ff6a4d; --accent:#8fa0ff; --accent-ink:#10132b; --hint:rgba(143,160,255,.7);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"]{
+    --bg:#161917; --surface:#202420; --ink:#e7eae5; --muted:#9aa29c; --line:#353b36;
+    --board:#b98f52; --board-edge:#9c7840; --grid:#3d2a12;
+    --tok-b:#121214; --tok-b2:#3c3c44; --tok-w:#f4f2ea; --tok-w2:#c9c4b5; --pip-b:#ece8dc; --pip-w:#121214;
+    --win:#ff6a4d; --accent:#8fa0ff; --accent-ink:#10132b; --hint:rgba(143,160,255,.7);
+    color-scheme: dark;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Source Serif 4",Georgia,serif;font-size:17px;line-height:1.55}
+h1,h2,button,label,summary,.status,.ui{font-family:"Bricolage Grotesque","Helvetica Neue",Arial,sans-serif}
+.wrap{max-width:1080px;margin:0 auto;padding:20px 16px 48px}
+h1{font-size:clamp(2.1rem,7vw,3.3rem);line-height:1;margin:6px 0 10px;font-weight:800;letter-spacing:-0.02em;display:flex;align-items:center;gap:.35em}
+h1 .mark{display:inline-grid;grid-template-columns:repeat(2,.32em);gap:.2em}
+h1 .mark i{width:.32em;height:.32em;border-radius:50%;background:var(--ink)}
+.lede{margin:0 0 22px;color:var(--muted);max-width:62ch}
+.layout{display:grid;grid-template-columns:minmax(0,1fr);gap:22px}
+@media (min-width:880px){.layout{grid-template-columns:minmax(0,560px) minmax(0,1fr);align-items:start}}
+svg.board{width:100%;max-width:560px;height:auto;display:block;border-radius:6px;box-shadow:0 1px 0 var(--board-edge),0 12px 30px -18px rgba(40,30,10,.6);touch-action:manipulation;user-select:none}
+.panel{display:flex;flex-direction:column;gap:18px}
+.status{font-size:1.4rem;font-weight:700;line-height:1.2;min-height:2.6em;display:flex;align-items:center;gap:12px}
+.status .dot{width:26px;height:26px;border-radius:50%;flex:none;border:1px solid var(--line)}
+.status small{display:block;font-weight:500;font-size:.92rem;color:var(--muted);margin-top:3px}
+.cycle{display:grid;grid-template-columns:repeat(8,1fr);gap:4px}
+.cycle div{border:1px solid var(--line);border-radius:6px;padding:5px 0 3px;text-align:center;background:var(--surface);opacity:.55}
+.cycle div.now{opacity:1;border-color:var(--accent);box-shadow:0 0 0 2px var(--accent)}
+.cycle svg{width:26px;height:26px;display:block;margin:0 auto}
+.cyclecap{font-size:13px;color:var(--muted);margin-top:6px;font-family:"Bricolage Grotesque",sans-serif}
+.tray h2{font-size:14px;font-weight:500;color:var(--muted);margin:0 0 6px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;min-height:46px;align-items:center}
+.chip{padding:3px;border-radius:50%;border:2px solid transparent;background:none;line-height:0}
+.chip svg{width:38px;height:38px}
+.chip[aria-pressed="true"]{border-color:var(--accent)}
+.chip:disabled{opacity:1;cursor:default}
+.empty{font-size:14px;color:var(--muted);font-family:"Bricolage Grotesque",sans-serif}
+label.h{font-size:14px;color:var(--muted);font-weight:500;display:block;margin-bottom:6px}
+.seg{display:inline-flex;flex-wrap:wrap;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface)}
+.seg button{border:0;border-radius:0;background:transparent;border-right:1px solid var(--line)}
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+button{font-size:15px;font-weight:600;padding:9px 14px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
+button.primary{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+button:focus-visible,summary:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.row{display:flex;flex-wrap:wrap;gap:8px}
+.turns{font-size:14px;color:var(--muted);font-family:"Bricolage Grotesque",sans-serif}
+.score{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center}
+.score div{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 4px}
+.score b{display:block;font-family:"Bricolage Grotesque",sans-serif;font-size:1.5rem;line-height:1.15}
+.score span{font-size:13px;color:var(--muted);font-family:"Bricolage Grotesque",sans-serif}
+details{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 14px}
+summary{cursor:pointer;font-weight:600}
+details ol{margin:10px 0 4px;padding-left:1.2em}
+details li{margin-bottom:6px}
+.hidden{display:none}
+.onlinebox{display:flex;flex-direction:column;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px}
+.join{display:flex;gap:8px;flex-wrap:wrap}
+.join input{flex:1;min-width:0;font:600 16px "Bricolage Grotesque",sans-serif;padding:9px 12px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
+.join input#joinCode{text-transform:uppercase;letter-spacing:.12em;max-width:9em}
+.note{font-size:14px;color:var(--muted);margin:0;font-family:"Bricolage Grotesque",sans-serif}
+.note.err{color:var(--win)}
+.or{font-size:13px;color:var(--muted);font-family:"Bricolage Grotesque",sans-serif}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Square Off <span class="mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span></h1>
+  <p class="lede">Place your numbered tokens, then move them in strict order. The first player with four tokens on the corners of a square wins.</p>
+  <div class="layout">
+    <svg class="board" id="board" viewBox="0 0 520 520" aria-label="Game board"></svg>
+    <div class="panel">
+      <div class="status" id="status" aria-live="polite"></div>
+      <div>
+        <div class="cycle" id="cycle"></div>
+        <div class="cyclecap" id="cyclecap"></div>
+      </div>
+      <div class="tray"><h2 id="trayTitleB">Black’s tokens to place</h2><div class="chips" id="trayB"></div></div>
+      <div class="tray"><h2 id="trayTitleW">White’s tokens to place</h2><div class="chips" id="trayW"></div></div>
+      <div class="turns" id="turns"></div>
+      <div>
+        <label class="h">Opponent</label>
+        <div class="seg" id="modeSeg"><button data-v="ai" aria-pressed="true">Computer</button><button data-v="pvp" aria-pressed="false">Friend on this device</button><button data-v="online" aria-pressed="false">Friend online</button></div>
+      </div>
+      <div id="aiOpts">
+        <label class="h">You play</label>
+        <div class="seg" id="sideSeg"><button data-v="1" aria-pressed="true">Black (first)</button><button data-v="-1" aria-pressed="false">White (second)</button></div>
+      </div>
+      <div id="lvlOpts">
+        <label class="h">Computer strength</label>
+        <div class="seg" id="lvlSeg"><button data-v="easy" aria-pressed="false">Easy</button><button data-v="normal" aria-pressed="true">Normal</button><button data-v="hard" aria-pressed="false">Hard</button></div>
+      </div>
+      <div id="onlineBox" class="onlinebox hidden">
+        <div id="onlineSetup" class="onlinebox" style="border:0;padding:0">
+          <button class="primary" id="createOnline">Create online game</button>
+          <span class="or">or join a friend’s game with their code</span>
+          <div class="join"><input id="joinCode" maxlength="6" placeholder="CODE" aria-label="Game code" autocomplete="off"><button id="joinBtn">Join</button></div>
+        </div>
+        <div id="onlineShare" class="hidden">
+          <label class="h" for="shareLink">Send this link to your friend</label>
+          <div class="join"><input id="shareLink" readonly><button id="copyBtn">Copy</button></div>
+          <p class="note" id="codeNote" style="margin-top:6px"></p>
+        </div>
+        <p class="note" id="onlineMsg" aria-live="polite"></p>
+      </div>
+      <div class="row"><button class="primary" id="newGame">New game</button><button id="undo">Undo</button></div>
+      <div class="score">
+        <div><b id="sB">0</b><span>Black wins</span></div>
+        <div><b id="sD">0</b><span>Draws</span></div>
+        <div><b id="sW">0</b><span>White wins</span></div>
+      </div>
+      <details>
+        <summary>Rules</summary>
+        <ol>
+          <li>Each player has eight tokens: two each of 1, 2, 3 and 4 dots. Black goes first.</li>
+          <li>Placement: take turns placing any token from your supply on an empty point. Black can’t use the centre on the very first turn.</li>
+          <li>Win by having four of your tokens on the corners of a square, any size, with sides along the grid lines. The numbers don’t matter for a win.</li>
+          <li>If all 16 tokens are down with no square, movement begins in a fixed order: Black moves a 1, White a 1, Black a 2, White a 2, and so on up to 4, then back to 1. You choose which of your two tokens of that number to move, to any empty point.</li>
+          <li>It’s a draw if the whole board layout repeats, or after 30 turns each (8 placing and 22 moving).</li>
+        </ol>
+      </details>
+    </div>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js"></script>
+<script>
+/* ================= rules engine ================= */
+const N=5, NP=25, CENTRE=12, MAXT=60, WIN=100000;
+const SQ=[];          // {m: bitmask, p:[4 points]}
+for (let s=1;s<N;s++) for (let r=0;r+s<N;r++) for (let c=0;c+s<N;c++){
+  const p=[r*N+c, r*N+c+s, (r+s)*N+c, (r+s)*N+c+s];
+  SQ.push({m:p.reduce((a,x)=>a|(1<<x),0), p});
+}
+const SQAT=Array.from({length:NP},(_,p)=>SQ.map((q,i)=>q.p.includes(p)?i:-1).filter(i=>i>=0));
+const CYCLE=[[1,1],[-1,1],[1,2],[-1,2],[1,3],[-1,3],[1,4],[-1,4]];
+const ix=pl=>pl===1?0:1;
+function rnd32(){return (Math.random()*4294967296)>>>0;}
+const Z1=[],Z2=[]; for(let k=0;k<8;k++){Z1.push([]);Z2.push([]); for(let p=0;p<NP;p++){Z1[k].push(rnd32());Z2[k].push(rnd32());}}
+const zk=(pl,v)=>ix(pl)*4+v-1;
+function pc(x){x=x-((x>>>1)&0x55555555);x=(x&0x33333333)+((x>>>2)&0x33333333);return (((x+(x>>>4))&0x0F0F0F0F)*0x01010101)>>>24;}
+
+function newState(){
+  const S={board:new Int8Array(NP),bits:[0,0],hand:[[0,2,2,2,2],[0,2,2,2,2]],turn:0,cycle:0,toMove:1,
+    z1:0,z2:0,seen:new Set(),result:null,reason:'',winSq:-1,last:-1,lastFrom:-1};
+  S.seen.add(key(S)); return S;
+}
+function cloneState(S){return {board:S.board.slice(),bits:S.bits.slice(),hand:[S.hand[0].slice(),S.hand[1].slice()],turn:S.turn,cycle:S.cycle,toMove:S.toMove,
+  z1:S.z1,z2:S.z2,seen:new Set(S.seen),result:S.result,reason:S.reason,winSq:S.winSq,last:S.last,lastFrom:S.lastFrom};}
+function key(S){return (S.z1&0x7FFFFFFF)*2097152+((S.z2>>>0)&0x1FFFFF);}
+const placing=S=>S.turn<16;
+function completes(S,p,i){const b=S.bits[i]; for(const q of SQAT[p]){const m=SQ[q].m; if((m&b)===m) return q;} return -1;}
+function preferredValue(h){let best=0; for(let v=1;v<=4;v++) if(h[v]>(best?h[best]:0)) best=v; return best;}
+
+function genMoves(S,forSearch){
+  const out=[], empt=[];
+  for(let p=0;p<NP;p++) if(!S.board[p]) empt.push(p);
+  if(placing(S)){
+    const h=S.hand[ix(S.toMove)];
+    let vals=[1,2,3,4].filter(v=>h[v]>0);
+    if(forSearch && S.turn<12) vals=[preferredValue(h)];
+    for(const v of vals) for(const p of empt){ if(S.turn===0&&p===CENTRE) continue; out.push({t:'p',v,to:p}); }
+  } else {
+    const [pl,v]=CYCLE[S.cycle];
+    for(let f=0;f<NP;f++) if(S.board[f]===pl*v) for(const p of empt) out.push({t:'m',from:f,to:p});
+  }
+  return out;
+}
+function make(S,mv){
+  const pl=S.toMove, i=ix(pl);
+  const u={mv,cycle:S.cycle,result:S.result,reason:S.reason,winSq:S.winSq,last:S.last,lastFrom:S.lastFrom,key:null};
+  if(mv.t==='p'){
+    S.board[mv.to]=pl*mv.v; S.bits[i]|=1<<mv.to; S.hand[i][mv.v]--;
+    const k=zk(pl,mv.v); S.z1^=Z1[k][mv.to]; S.z2^=Z2[k][mv.to];
+  } else {
+    const v=Math.abs(S.board[mv.from]), k=zk(pl,v);
+    S.board[mv.to]=S.board[mv.from]; S.board[mv.from]=0; S.bits[i]^=(1<<mv.from)|(1<<mv.to);
+    S.z1^=Z1[k][mv.from]^Z1[k][mv.to]; S.z2^=Z2[k][mv.from]^Z2[k][mv.to];
+    S.cycle=(S.cycle+1)%8;
+  }
+  S.turn++; S.toMove=-pl; S.last=mv.to; S.lastFrom=mv.t==='m'?mv.from:-1;
+  const w=completes(S,mv.to,i);
+  if(w>=0){S.result=pl;S.winSq=w;S.reason='square';}
+  else{
+    const k=key(S);
+    if(S.seen.has(k)){S.result=0;S.reason='repeat';}
+    else{S.seen.add(k);u.key=k; if(S.turn>=MAXT){S.result=0;S.reason='limit';}}
+  }
+  return u;
+}
+function unmake(S,u){
+  const mv=u.mv; S.toMove=-S.toMove; S.turn--; const pl=S.toMove, i=ix(pl);
+  if(u.key!==null) S.seen.delete(u.key);
+  if(mv.t==='p'){
+    S.board[mv.to]=0; S.bits[i]&=~(1<<mv.to); S.hand[i][mv.v]++;
+    const k=zk(pl,mv.v); S.z1^=Z1[k][mv.to]; S.z2^=Z2[k][mv.to];
+  } else {
+    const v=Math.abs(S.board[mv.to]), k=zk(pl,v);
+    S.board[mv.from]=S.board[mv.to]; S.board[mv.to]=0; S.bits[i]^=(1<<mv.from)|(1<<mv.to);
+    S.z1^=Z1[k][mv.from]^Z1[k][mv.to]; S.z2^=Z2[k][mv.from]^Z2[k][mv.to];
+  }
+  S.cycle=u.cycle; S.result=u.result; S.reason=u.reason; S.winSq=u.winSq; S.last=u.last; S.lastFrom=u.lastFrom;
+}
+
+/* ================= computer player ================= */
+const WT=[0,1,4,22,0];
+function evalB(S){ // positive is good for Black
+  const B=S.bits[0], W=S.bits[1]; let s=0;
+  for(const q of SQ){const b=pc(q.m&B), w=pc(q.m&W); if(!w) s+=WT[b]; if(!b) s-=WT[w];}
+  return s;
+}
+let deadline=0, aborted=false, nodes=0;
+function ordered(S,moves){
+  const sc=moves.map(mv=>{const pl=S.toMove; const u=make(S,mv);
+    const v=S.result===pl?1e9:(S.result===0?0:pl*evalB(S)); unmake(S,u); return v;});
+  return moves.map((m,i)=>[m,sc[i]]).sort((a,b)=>b[1]-a[1]).map(x=>x[0]);
+}
+function negamax(S,depth,alpha,beta,ply){
+  if(((++nodes)&511)===0 && performance.now()>deadline) aborted=true;
+  if(aborted) return 0;
+  let moves=genMoves(S,true); if(depth>=2) moves=ordered(S,moves);
+  let best=-Infinity;
+  for(const mv of moves){
+    const u=make(S,mv); let sc;
+    if(S.result!==null) sc=S.result===0?0:WIN-ply;
+    else if(depth<=1) sc=-S.toMove*evalB(S);
+    else sc=-negamax(S,depth-1,-beta,-alpha,ply+1);
+    unmake(S,u);
+    if(aborted) return 0;
+    if(sc>best) best=sc; if(sc>alpha) alpha=sc; if(alpha>=beta) break;
+  }
+  return best;
+}
+function rootSearch(S,maxDepth,ms){
+  deadline=performance.now()+ms; aborted=false; nodes=0;
+  let moves=ordered(S,genMoves(S,true)); let bestMoves=moves.map(m=>[m,0]); let completed=0;
+  for(let d=1; d<=maxDepth; d++){
+    const res=[]; let alpha=-Infinity;
+    for(const mv of moves){
+      const u=make(S,mv); let sc;
+      if(S.result!==null) sc=S.result===0?0:WIN;
+      else if(d===1) sc=-S.toMove*evalB(S);
+      else sc=-negamax(S,d-1,-Infinity,-alpha+1,1);   // slightly widened window so near-equal moves get real scores
+      unmake(S,u);
+      if(aborted) break;
+      res.push([mv,sc]); if(sc>alpha) alpha=sc;
+    }
+    if(aborted) break;
+    res.sort((a,b)=>b[1]-a[1]); bestMoves=res; moves=res.map(x=>x[0]); completed=d;
+    if(res[0][1]>=WIN-50) break;   // found a forced win
+  }
+  return {list:bestMoves, depth:completed};
+}
+function chooseMove(S,level){
+  const cfg={easy:[2,250],normal:[4,700],hard:[12,2200]}[level];
+  const {list}=rootSearch(S,cfg[0],cfg[1]);
+  let mv;
+  if(level==='easy'){
+    const top=list[0][1]; if(top>=WIN-50) mv=list[0][0];
+    else { const ok=list.filter(x=>x[1]>=top-8&&x[1]>-WIN+50); mv=(ok.length?ok:list)[Math.floor(Math.random()*Math.min(ok.length||1,5))][0]; }
+  } else {
+    const top=list[0][1]; const ties=list.filter(x=>x[1]===top); mv=ties[Math.floor(Math.random()*ties.length)][0];
+  }
+  if(mv.t==='p' && placing(S)){ // choose which number to place: keep a spread
+    const h=S.hand[ix(S.toMove)]; if(!h[mv.v]) mv={...mv,v:preferredValue(h)};
+  }
+  return mv;
+}
+
+/* ================= UI ================= */
+const NS='http://www.w3.org/2000/svg', PAD=60, STEP=100, R=34;
+const svg=document.getElementById('board');
+function el(n,a,p){const e=document.createElementNS(NS,n); for(const k in a) e.setAttribute(k,a[k]); if(p) p.appendChild(e); return e;}
+const xy=p=>[PAD+(p%N)*STEP, PAD+Math.floor(p/N)*STEP];
+const PIPS={1:[[0,0]],2:[[-.38,-.38],[.38,.38]],3:[[-.42,-.42],[0,0],[.42,.42]],4:[[-.38,-.38],[.38,-.38],[-.38,.38],[.38,.38]]};
+function drawToken(g,x,y,r,val,uid){
+  const pl=Math.sign(val), v=Math.abs(val);
+  el('circle',{cx:x,cy:y+2,r,fill:'rgba(0,0,0,.22)'},g);
+  el('circle',{cx:x,cy:y,r,fill:`url(#${pl===1?'gb':'gw'}${uid||''})`},g);
+  for(const [dx,dy] of PIPS[v]) el('circle',{cx:x+dx*r,cy:y+dy*r,r:r*0.15,fill:pl===1?'var(--pip-b)':'var(--pip-w)'},g);
+}
+function gradDefs(parent,suffix){
+  const d=el('defs',{},parent);
+  const gb=el('radialGradient',{id:'gb'+suffix,cx:'35%',cy:'30%',r:'70%'},d);
+  el('stop',{offset:'0%','stop-color':'var(--tok-b2)'},gb); el('stop',{offset:'100%','stop-color':'var(--tok-b)'},gb);
+  const gw=el('radialGradient',{id:'gw'+suffix,cx:'35%',cy:'30%',r:'75%'},d);
+  el('stop',{offset:'0%','stop-color':'var(--tok-w)'},gw); el('stop',{offset:'100%','stop-color':'var(--tok-w2)'},gw);
+}
+function miniToken(val,size){
+  const s=document.createElementNS(NS,'svg'); s.setAttribute('viewBox','0 0 40 40'); s.setAttribute('aria-hidden','true');
+  drawToken(s,20,19,16,val,''); return s;
+}
+let gBoard,gMarks,gTokens,gHints;
+function setupBoard(){
+  svg.innerHTML=''; gradDefs(svg,'');
+  el('rect',{x:0,y:0,width:520,height:520,fill:'var(--board)'},svg);
+  for(let i=0;i<N;i++){const p=PAD+i*STEP;
+    el('line',{x1:PAD,y1:p,x2:PAD+4*STEP,y2:p,stroke:'var(--grid)','stroke-width':2},svg);
+    el('line',{x1:p,y1:PAD,x2:p,y2:PAD+4*STEP,stroke:'var(--grid)','stroke-width':2},svg);}
+  for(let p=0;p<NP;p++){const [x,y]=xy(p); el('circle',{cx:x,cy:y,r:p===CENTRE?7:4,fill:'var(--grid)'},svg);}
+  gMarks=el('g',{},svg); gTokens=el('g',{},svg); gHints=el('g',{},svg);
+  const hits=el('g',{},svg);
+  for(let p=0;p<NP;p++){const [x,y]=xy(p);
+    const c=el('circle',{cx:x,cy:y,r:46,fill:'transparent',style:'cursor:pointer'},hits);
+    c.addEventListener('click',()=>onPoint(p));}
+}
+
+let G, mode='ai', human=1, level='normal', selVal=0, selFrom=-1, thinking=false, timer=null, undoStack=[];
+const score={1:0,'-1':0,0:0};
+const name=p=>p===1?'Black':'White';
+const humanTurn=()=>G.result===null && !thinking && (mode==='pvp' || (mode==='ai'&&G.toMove===human) ||
+  (mode==='online' && ON.code && !ON.sending && ON.row && ON.row.black && ON.row.white && G.toMove===ON.side));
+
+function render(){
+  gTokens.innerHTML=''; gMarks.innerHTML=''; gHints.innerHTML='';
+  // last move markers
+  if(G.lastFrom>=0){const [x,y]=xy(G.lastFrom); el('circle',{cx:x,cy:y,r:R-4,fill:'none',stroke:'var(--grid)','stroke-width':2,'stroke-dasharray':'5 5',opacity:.8},gMarks);}
+  for(let p=0;p<NP;p++) if(G.board[p]){const [x,y]=xy(p); drawToken(gTokens,x,y,R,G.board[p],'');}
+  if(G.last>=0 && G.result===null){const [x,y]=xy(G.last); el('circle',{cx:x,cy:y,r:R+5,fill:'none',stroke:'var(--grid)','stroke-width':2.5},gMarks);}
+  if(G.winSq>=0){const q=SQ[G.winSq].p; const [x1,y1]=xy(q[0]), [x2,y2]=xy(q[3]);
+    el('rect',{x:x1,y:y1,width:x2-x1,height:y2-y1,fill:'none',stroke:'var(--win)','stroke-width':7,'stroke-linejoin':'round',opacity:.9},gHints);
+    q.forEach(p=>{const [x,y]=xy(p); el('circle',{cx:x,cy:y,r:R+5,fill:'none',stroke:'var(--win)','stroke-width':4},gHints);});}
+  if(humanTurn()){
+    if(placing(G)){
+      if(G.turn===0){const [x,y]=xy(CENTRE); el('path',{d:`M${x-10} ${y-10}L${x+10} ${y+10}M${x+10} ${y-10}L${x-10} ${y+10}`,stroke:'var(--win)','stroke-width':3,'stroke-linecap':'round'},gHints);}
+    } else {
+      const [pl,v]=CYCLE[G.cycle];
+      for(let p=0;p<NP;p++) if(G.board[p]===pl*v){const [x,y]=xy(p);
+        el('circle',{cx:x,cy:y,r:R+5,fill:'none',stroke:'var(--accent)','stroke-width':p===selFrom?6:3},gHints);}
+      if(selFrom>=0) for(let p=0;p<NP;p++) if(!G.board[p]){const [x,y]=xy(p); el('circle',{cx:x,cy:y,r:10,fill:'var(--hint)'},gHints);}
+    }
+  }
+  renderPanel();
+}
+function renderPanel(){
+  // status
+  const st=document.getElementById('status');
+  const dot=p=>`<span class="dot" style="background:${p===1?'var(--tok-b)':'var(--tok-w)'}"></span>`;
+  if(mode==='online'){ st.innerHTML=onlineStatusHTML(dot); }
+  else if(G.result!==null){
+    if(G.result===0){ st.innerHTML=`<div>Draw<small>${G.reason==='repeat'?'The board layout repeated.':'Both players reached 30 turns.'}</small></div>`; }
+    else { const w=G.result; const main=mode==='ai'?(w===human?'You win!':'The computer wins.'):`${name(w)} wins!`;
+      st.innerHTML=`${dot(w)}<div>${main}<small>Square completed on turn ${Math.ceil(G.turn/2)} of ${name(w)}’s 30.</small></div>`; }
+  } else {
+    const pl=G.toMove; let main, sub;
+    const you = mode==='ai' ? (pl===human?'Your turn':'Computer is thinking…') : `${name(pl)} to play`;
+    if(placing(G)){ main=you; sub = (mode==='ai'&&pl!==human)?'':(G.turn===0?'Pick a token, then a point. The centre is off-limits this turn.':'Pick a token from your supply, then tap an empty point.'); }
+    else { const v=CYCLE[G.cycle][1]; main=you; sub=(mode==='ai'&&pl!==human)?`${name(pl)} moves a ${v}.`:`Move one of your ${v}s: tap it, then tap an empty point.`; }
+    st.innerHTML=`${dot(pl)}<div>${main}${sub?`<small>${sub}</small>`:''}</div>`;
+  }
+  // cycle strip
+  const cy=document.getElementById('cycle'); cy.innerHTML='';
+  CYCLE.forEach(([pl,v],i)=>{const d=document.createElement('div'); if(!placing(G)&&G.result===null&&i===G.cycle) d.className='now';
+    d.appendChild(miniToken(pl*v)); cy.appendChild(d);});
+  document.getElementById('cyclecap').textContent = placing(G)
+    ? `Movement order, which starts once all 16 tokens are placed (${16-G.turn} placements to go).`
+    : 'Movement order. The highlighted token type moves next, then it loops back to the start.';
+  // trays
+  [1,-1].forEach(pl=>{
+    const tray=document.getElementById(pl===1?'trayB':'trayW'); tray.innerHTML='';
+    const h=G.hand[ix(pl)]; let any=false;
+    const mine = humanTurn() && placing(G) && G.toMove===pl;
+    for(let v=1;v<=4;v++) for(let k=0;k<h[v];k++){ any=true;
+      const b=document.createElement('button'); b.className='chip'; b.setAttribute('aria-label',`${name(pl)} ${v}`);
+      b.appendChild(miniToken(pl*v));
+      if(mine){ b.setAttribute('aria-pressed', v===selVal&&k===0?'true':'false'); b.onclick=()=>{selVal=v; render();}; }
+      else b.disabled=true;
+      tray.appendChild(b);}
+    if(!any){const s=document.createElement('span'); s.className='empty'; s.textContent='All placed'; tray.appendChild(s);}
+  });
+  const bt=Math.ceil(G.turn/2), wt=Math.floor(G.turn/2);
+  document.getElementById('turns').textContent=`Turns used: Black ${bt} of 30, White ${wt} of 30`;
+  document.getElementById('sB').textContent=score[1]; document.getElementById('sW').textContent=score[-1]; document.getElementById('sD').textContent=score[0];
+}
+function ensureSelVal(){ if(!placing(G)) return; const h=G.hand[ix(G.toMove)]; if(!h[selVal]) selVal=[1,2,3,4].find(v=>h[v]>0)||0; }
+function doMove(mv){
+  if(mode==='online'){ sendOnline(mv); return; }
+  undoStack.push(cloneState(G));
+  make(G,mv); selFrom=-1;
+  if(G.result!==null) score[G.result]++;
+  ensureSelVal(); render(); maybeAI();
+}
+function onPoint(p){
+  if(!humanTurn()) return;
+  if(placing(G)){
+    if(G.board[p]||(G.turn===0&&p===CENTRE)||!selVal) return;
+    doMove({t:'p',v:selVal,to:p});
+  } else {
+    const [pl,v]=CYCLE[G.cycle];
+    if(G.board[p]===pl*v){ selFrom=(selFrom===p?-1:p); render(); return; }
+    if(selFrom>=0 && !G.board[p]) doMove({t:'m',from:selFrom,to:p});
+  }
+}
+function maybeAI(){
+  if(mode!=='ai'||G.result!==null||G.toMove===human) return;
+  thinking=true; render();
+  timer=setTimeout(()=>{ const S=cloneState(G); const mv=chooseMove(S,level); thinking=false; doMove(mv); }, 60);
+}
+function newGame(){ leaveOnline(); clearTimeout(timer); thinking=false; G=newState(); undoStack=[]; selFrom=-1; selVal=1; setupBoard(); render(); maybeAI(); }
+function undo(){
+  if(mode==='online'||thinking||!undoStack.length) return;
+  if(G.result!==null) score[G.result]--;
+  G=undoStack.pop();
+  if(mode==='ai') while(undoStack.length && G.toMove!==human) G=undoStack.pop();
+  selFrom=-1; ensureSelVal(); render(); maybeAI();
+}
+function seg(id,cb){const s=document.getElementById(id);
+  s.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{
+    s.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b?'true':'false')); cb(b.dataset.v); newGame();}));}
+seg('modeSeg',v=>{mode=v; showControls();});
+seg('sideSeg',v=>{human=+v;});
+seg('lvlSeg',v=>{level=v;});
+document.getElementById('newGame').addEventListener('click',()=>{ if(mode==='online'){ if(onlineConfigured) createOnline(); } else newGame(); });
+document.getElementById('undo').addEventListener('click',undo);
+
+/* ================= online play (Supabase) ================= */
+// SETUP: paste your own Supabase details between the quotes (see README.md).
+// Project URL looks like:      https://abcdefghijklmnop.supabase.co
+// Publishable key looks like:  sb_publishable_...  (older projects: the long "anon public" key)
+// Never paste the secret / service_role key here.
+const SUPABASE_URL = 'https://revzwdanpotmoihyjuna.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_IcUdV5aEwcycIuPhMqclpA_K2M2ZaP2';
+
+const onlineConfigured = !SUPABASE_URL.startsWith('PASTE') && !SUPABASE_KEY.startsWith('PASTE');
+let sb=null, myId=null;
+const ON={code:null, side:0, row:null, channel:null, poll:null, sending:false, counted:new Set()};
+const $=id=>document.getElementById(id);
+
+function showControls(){
+  $('aiOpts').classList.toggle('hidden', !(mode==='ai'||mode==='online'));
+  $('lvlOpts').classList.toggle('hidden', mode!=='ai');
+  $('onlineBox').classList.toggle('hidden', mode!=='online');
+  $('undo').classList.toggle('hidden', mode==='online');
+  $('newGame').textContent = mode==='online' ? 'New online game' : 'New game';
+  updateOnlineBox();
+}
+function onlineMsg(text,isErr){ const m=$('onlineMsg'); m.textContent=text||''; m.classList.toggle('err',!!isErr); }
+function updateOnlineBox(){
+  const inGame=!!ON.code;
+  $('onlineSetup').classList.toggle('hidden', inGame || !onlineConfigured);
+  $('onlineShare').classList.toggle('hidden', !inGame);
+  if(inGame){
+    $('shareLink').value = location.origin + location.pathname + '?game=' + ON.code;
+    $('codeNote').textContent = `Game code ${ON.code}. ` + (ON.side ? `You’re playing ${name(ON.side)}.` : 'You’re watching.');
+  }
+  if(!onlineConfigured) onlineMsg('Online play needs your Supabase details in index.html. See the README.', true);
+}
+async function sbInit(){
+  if(sb) return;
+  if(!window.supabase) throw new Error('Could not load the online library. Check your internet connection.');
+  sb = window.supabase.createClient(SUPABASE_URL.trim(), SUPABASE_KEY.trim());
+  let { data:{ session } } = await sb.auth.getSession();
+  if(!session){
+    const { data, error } = await sb.auth.signInAnonymously();
+    if(error) throw error;
+    session = data.session;
+  }
+  myId = session.user.id;
+}
+const encode = mv => mv.t==='p' ? ['p',mv.v,mv.to] : ['m',mv.from,mv.to];
+const decode = a  => a[0]==='p' ? {t:'p',v:a[1],to:a[2]} : {t:'m',from:a[1],to:a[2]};
+const sameMove = (a,b) => a.t===b.t && a.to===b.to && (a.t==='p' ? a.v===b.v : a.from===b.from);
+function replay(list){
+  const S=newState();
+  for(const a of list){
+    const mv=decode(a);
+    if(S.result!==null || !genMoves(S,false).some(m=>sameMove(m,mv))) throw new Error('bad move');
+    make(S,mv);
+  }
+  return S;
+}
+function applyRow(row){
+  if(!row || row.id!==ON.code) return;
+  if(ON.row && row.version < ON.row.version) return;          // ignore stale updates
+  ON.row=row; ON.side = row.black===myId ? 1 : (row.white===myId ? -1 : 0);
+  try { G=replay(row.moves||[]); }
+  catch(e){ onlineMsg('This game’s move list looks corrupted, so it can’t be shown.', true); return; }
+  if(G.result!==null && !ON.counted.has(row.id)){ ON.counted.add(row.id); score[G.result]++; }
+  selFrom=-1; ensureSelVal(); updateOnlineBox(); render();
+}
+async function refresh(){
+  if(!ON.code||ON.sending) return;
+  const { data } = await sb.from('games').select('*').eq('id',ON.code).maybeSingle();
+  if(data) applyRow(data);
+}
+function subscribe(code){
+  if(ON.channel) sb.removeChannel(ON.channel);
+  ON.channel = sb.channel('game-'+code)
+    .on('postgres_changes', { event:'UPDATE', schema:'public', table:'games', filter:'id=eq.'+code }, p => applyRow(p.new))
+    .subscribe();
+  clearInterval(ON.poll); ON.poll=setInterval(refresh, 5000);   // safety net if a live update is missed
+}
+function enterGame(row){
+  ON.code=row.id; ON.row=null;
+  history.replaceState(null,'', location.pathname + '?game=' + row.id);
+  applyRow(row); subscribe(row.id); onlineMsg('');
+}
+function leaveOnline(){
+  if(ON.channel && sb) sb.removeChannel(ON.channel);
+  clearInterval(ON.poll);
+  Object.assign(ON,{code:null, side:0, row:null, channel:null, sending:false});
+  if(location.search.includes('game=')) history.replaceState(null,'', location.pathname);
+  if($('onlineBox')) updateOnlineBox();
+}
+function makeCode(){ const A='ABCDEFGHJKMNPQRSTUVWXYZ23456789'; let c=''; for(let i=0;i<5;i++) c+=A[Math.floor(Math.random()*A.length)]; return c; }
+async function createOnline(){
+  try{
+    onlineMsg('Creating a game…'); await sbInit(); newGame();
+    for(let tries=0; tries<5; tries++){
+      const code=makeCode();
+      const { data, error } = await sb.from('games')
+        .insert({ id:code, black: human===1 ? myId : null, white: human===-1 ? myId : null })
+        .select().single();
+      if(!error){ enterGame(data); return; }
+      if(error.code!=='23505') throw error;   // 23505 = that code is taken; try another
+    }
+    throw new Error('Could not find a free game code. Try again.');
+  } catch(e){ onlineMsg('Couldn’t create the game: ' + (e.message||e), true); }
+}
+async function joinOnline(raw){
+  const code=(raw||'').trim().toUpperCase();
+  if(!code){ onlineMsg('Type the code your friend sent you.', true); return; }
+  try{
+    onlineMsg('Joining…'); await sbInit(); newGame();
+    let { data:row, error } = await sb.from('games').select('*').eq('id',code).maybeSingle();
+    if(error) throw error;
+    if(!row){ onlineMsg(`No game found with the code ${code}.`, true); return; }
+    if(row.black!==myId && row.white!==myId){
+      const seat = row.black===null ? 'black' : (row.white===null ? 'white' : null);
+      if(seat){
+        const res = await sb.from('games').update({ [seat]: myId }).eq('id',code).is(seat,null).select();
+        if(res.data && res.data.length) row=res.data[0];
+        else row=(await sb.from('games').select('*').eq('id',code).maybeSingle()).data;
+      }
+    }
+    enterGame(row);
+    if(ON.side===0) onlineMsg('This game already has two players, so you’re watching.');
+  } catch(e){ onlineMsg('Couldn’t join the game: ' + (e.message||e), true); }
+}
+async function sendOnline(mv){
+  const row=ON.row; if(!row) return;
+  const moves=[...(row.moves||[]), encode(mv)];
+  make(G,mv); selFrom=-1; ON.sending=true; ensureSelVal(); render();     // show the move straight away
+  try{
+    const { data, error } = await sb.from('games')
+      .update({ moves, version: row.version+1 })
+      .eq('id',row.id).eq('version',row.version)        // only if nobody else moved first
+      .select();
+    ON.sending=false;
+    if(error || !data || !data.length){ onlineMsg('That move didn’t go through, so the board was re-synced.', true); await refresh(); return; }
+    onlineMsg(''); applyRow(data[0]);
+  } catch(e){ ON.sending=false; onlineMsg('Connection problem. Re-syncing…', true); refresh(); }
+}
+function onlineStatusHTML(dot){
+  if(!onlineConfigured) return `<div>Online play isn’t set up yet<small>Add your Supabase details to index.html.</small></div>`;
+  if(!ON.code) return `<div>Play a friend online<small>Create a game and send them the link, or join with their code.</small></div>`;
+  const r=ON.row, both=r&&r.black&&r.white;
+  if(G.result!==null){
+    if(G.result===0) return `<div>Draw<small>${G.reason==='repeat'?'The board layout repeated.':'Both players reached 30 turns.'}</small></div>`;
+    const w=G.result, main = ON.side===0 ? `${name(w)} wins!` : (w===ON.side ? 'You win!' : 'Your friend wins.');
+    return `${dot(w)}<div>${main}<small>Press “New online game” for a rematch.</small></div>`;
+  }
+  if(!both) return `${dot(ON.side||1)}<div>Waiting for your friend to join…<small>Send them the link below.</small></div>`;
+  const pl=G.toMove;
+  if(ON.side===0) return `${dot(pl)}<div>${name(pl)} to play<small>You’re watching this game.</small></div>`;
+  if(pl!==ON.side) return `${dot(pl)}<div>Your friend’s turn<small>Their move will appear here by itself.</small></div>`;
+  const sub = placing(G) ? (G.turn===0 ? 'Pick a token, then a point. The centre is off-limits this turn.' : 'Pick a token from your supply, then tap an empty point.')
+                         : `Move one of your ${CYCLE[G.cycle][1]}s: tap it, then tap an empty point.`;
+  return `${dot(pl)}<div>Your turn<small>${sub}</small></div>`;
+}
+$('createOnline').addEventListener('click', createOnline);
+$('joinBtn').addEventListener('click', ()=>joinOnline($('joinCode').value));
+$('joinCode').addEventListener('keydown', e=>{ if(e.key==='Enter') joinOnline($('joinCode').value); });
+$('copyBtn').addEventListener('click', async ()=>{
+  try{ await navigator.clipboard.writeText($('shareLink').value); $('copyBtn').textContent='Copied'; }
+  catch(e){ $('shareLink').select(); $('copyBtn').textContent='Press Ctrl+C'; }
+  setTimeout(()=>$('copyBtn').textContent='Copy', 1800);
+});
+
+/* ================= start-up ================= */
+const startCode = new URLSearchParams(location.search).get('game');   // read before anything resets the address
+newGame();
+showControls();
+if(startCode){   // opened from an invite link: switch to online mode and join
+  mode='online';
+  document.querySelectorAll('#modeSeg button').forEach(b=>b.setAttribute('aria-pressed', b.dataset.v==='online'?'true':'false'));
+  showControls();
+  if(onlineConfigured) joinOnline(startCode);
+}
+</script>
+</body>
+</html>
