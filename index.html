@@ -62,7 +62,7 @@ svg.board{width:100%;max-width:560px;height:auto;display:block;border-radius:6px
 .empty{font-size:14px;color:var(--muted);font-family:"Bricolage Grotesque",sans-serif}
 label.h{font-size:14px;color:var(--muted);font-weight:500;display:block;margin-bottom:6px}
 .seg{display:inline-flex;flex-wrap:wrap;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface)}
-.seg button{border:0;border-radius:0;background:transparent;border-right:1px solid var(--line)}
+.seg button{min-width:44px;border:0;border-radius:0;background:transparent;border-right:1px solid var(--line)}
 .seg button:last-child{border-right:0}
 .seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
 button{font-size:15px;font-weight:600;padding:9px 14px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
@@ -113,7 +113,8 @@ details li{margin-bottom:6px}
       </div>
       <div id="lvlOpts">
         <label class="h">Computer strength</label>
-        <div class="seg" id="lvlSeg"><button data-v="easy" aria-pressed="false">Easy</button><button data-v="normal" aria-pressed="true">Normal</button><button data-v="hard" aria-pressed="false">Hard</button></div>
+        <div class="seg" id="lvlSeg"><button data-v="1" aria-pressed="false">1</button><button data-v="2" aria-pressed="false">2</button><button data-v="3" aria-pressed="true">3</button><button data-v="4" aria-pressed="false">4</button><button data-v="5" aria-pressed="false">5</button></div>
+        <p class="note" id="lvlNote" style="margin-top:6px"></p>
       </div>
       <div id="onlineBox" class="onlinebox hidden">
         <div id="onlineSetup" class="onlinebox" style="border:0;padding:0">
@@ -275,15 +276,29 @@ function rootSearch(S,maxDepth,ms){
   }
   return {list:bestMoves, depth:completed};
 }
+/* Five strength levels. Each looks further ahead and leaves less to chance than the one below.
+   depth  = how many turns ahead it searches      ms     = thinking-time cap
+   margin = how much worse than its best move a move can be and still get picked
+   pool   = how many of the top moves it chooses between at random
+   slip   = how often it does that (otherwise it plays its best move)
+   Every level always takes a winning move and never picks a move it sees losing outright. */
+const LEVELS={
+  1:{name:'Beginner',     depth:2,  ms:250,  margin:8, pool:5, slip:1,    about:'Looks 2 turns ahead and often picks a so-so move.'},
+  2:{name:'Casual',       depth:2,  ms:300,  margin:3, pool:3, slip:1,    about:'Looks 2 turns ahead and usually picks a decent move.'},
+  3:{name:'Intermediate', depth:2,  ms:350,  margin:2, pool:3, slip:0.6,  about:'Looks 2 turns ahead and plays its best move a little under half the time.'},
+  4:{name:'Advanced',     depth:4,  ms:700,  margin:2, pool:3, slip:0.45, about:'Looks 4 turns ahead and plays its best move about half the time.'},
+  5:{name:'Expert',       depth:12, ms:2200, margin:0, pool:1, slip:0,    about:'Searches as deep as it can in about 2 seconds a move and always plays its best.'},
+};
 function chooseMove(S,level){
-  const cfg={easy:[2,250],normal:[4,700],hard:[12,2200]}[level];
-  const {list}=rootSearch(S,cfg[0],cfg[1]);
+  const L=LEVELS[level];
+  const {list}=rootSearch(S,L.depth,L.ms);
+  const top=list[0][1];
   let mv;
-  if(level==='easy'){
-    const top=list[0][1]; if(top>=WIN-50) mv=list[0][0];
-    else { const ok=list.filter(x=>x[1]>=top-8&&x[1]>-WIN+50); mv=(ok.length?ok:list)[Math.floor(Math.random()*Math.min(ok.length||1,5))][0]; }
-  } else {
-    const top=list[0][1]; const ties=list.filter(x=>x[1]===top); mv=ties[Math.floor(Math.random()*ties.length)][0];
+  if(top>=WIN-50) mv=list[0][0];                        // take a forced win
+  else {
+    let ok=list.filter(x=>x[1]>=top-L.margin && x[1]>-WIN+50).slice(0,L.pool);
+    if(!ok.length || Math.random()>=L.slip) ok=list.filter(x=>x[1]===top);   // most turns: its best move
+    mv=ok[Math.floor(Math.random()*ok.length)][0];
   }
   if(mv.t==='p' && placing(S)){ // choose which number to place: keep a spread
     const h=S.hand[ix(S.toMove)]; if(!h[mv.v]) mv={...mv,v:preferredValue(h)};
@@ -329,7 +344,7 @@ function setupBoard(){
     c.addEventListener('click',()=>onPoint(p));}
 }
 
-let G, mode='ai', human=1, level='normal', selVal=0, selFrom=-1, thinking=false, timer=null, undoStack=[];
+let G, mode='ai', human=1, level=3, selVal=0, selFrom=-1, thinking=false, timer=null, undoStack=[];
 const score={1:0,'-1':0,0:0};
 const name=p=>p===1?'Black':'White';
 const humanTurn=()=>G.result===null && !thinking && (mode==='pvp' || (mode==='ai'&&G.toMove===human) ||
@@ -433,7 +448,9 @@ function seg(id,cb){const s=document.getElementById(id);
     s.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b?'true':'false')); cb(b.dataset.v); newGame();}));}
 seg('modeSeg',v=>{mode=v; showControls();});
 seg('sideSeg',v=>{human=+v;});
-seg('lvlSeg',v=>{level=v;});
+seg('lvlSeg',v=>{level=+v; showLevel();});
+function showLevel(){ const L=LEVELS[level]; document.getElementById('lvlNote').textContent=`Level ${level}, ${L.name}: ${L.about}`; }
+showLevel();
 document.getElementById('newGame').addEventListener('click',()=>{ if(mode==='online'){ if(onlineConfigured) createOnline(); } else newGame(); });
 document.getElementById('undo').addEventListener('click',undo);
 
