@@ -283,10 +283,10 @@ function rootSearch(S,maxDepth,ms){
    slip   = how often it does that (otherwise it plays its best move)
    Every level always takes a winning move and never picks a move it sees losing outright. */
 const LEVELS={
-  1:{name:'Beginner',     depth:2,  ms:250,  margin:8, pool:5, slip:1,    about:'Looks 2 turns ahead and often picks a so-so move.'},
-  2:{name:'Casual',       depth:2,  ms:300,  margin:3, pool:3, slip:1,    about:'Looks 2 turns ahead and usually picks a decent move.'},
-  3:{name:'Intermediate', depth:2,  ms:350,  margin:2, pool:3, slip:0.6,  about:'Looks 2 turns ahead and plays its best move a little under half the time.'},
-  4:{name:'Advanced',     depth:4,  ms:700,  margin:2, pool:3, slip:0.45, about:'Looks 4 turns ahead and plays its best move about half the time.'},
+  1:{name:'Beginner',     depth:2,  ms:350,  margin:2, pool:3, slip:0.6,  about:'Looks 2 turns ahead and plays its best move a little under half the time.'},
+  2:{name:'Casual',       depth:2,  ms:350,  margin:2, pool:3, slip:0.35, about:'Looks 2 turns ahead and plays its best move about two times in three.'},
+  3:{name:'Intermediate', depth:3,  ms:450,  margin:2, pool:2, slip:0.4,  about:'Looks 3 turns ahead and plays its best move more often than not.'},
+  4:{name:'Advanced',     depth:4,  ms:700,  margin:2, pool:3, slip:0.3,  about:'Looks 4 turns ahead and plays its best move most of the time.'},
   5:{name:'Expert',       depth:12, ms:2200, margin:0, pool:1, slip:0,    about:'Searches as deep as it can in about 2 seconds a move and always plays its best.'},
 };
 function chooseMove(S,level){
