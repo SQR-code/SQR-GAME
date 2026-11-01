@@ -113,7 +113,7 @@ details li{margin-bottom:6px}
       </div>
       <div id="lvlOpts">
         <label class="h">Computer strength</label>
-        <div class="seg" id="lvlSeg"><button data-v="1" aria-pressed="false">1</button><button data-v="2" aria-pressed="false">2</button><button data-v="3" aria-pressed="true">3</button><button data-v="4" aria-pressed="false">4</button><button data-v="5" aria-pressed="false">5</button></div>
+        <div class="seg" id="lvlSeg"><button data-v="1" aria-pressed="false">1</button><button data-v="2" aria-pressed="false">2</button><button data-v="3" aria-pressed="true">3</button><button data-v="4" aria-pressed="false">4</button><button data-v="5" aria-pressed="false">5</button><button data-v="6" aria-pressed="false" id="lvl6btn">6</button></div>
         <p class="note" id="lvlNote" style="margin-top:6px"></p>
       </div>
       <div id="onlineBox" class="onlinebox hidden">
@@ -149,6 +149,7 @@ details li{margin-bottom:6px}
   </div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js"></script>
+<script src="nn_weights.js"></script>
 <script>
 /* ================= rules engine ================= */
 const N=5, NP=25, CENTRE=12, MAXT=60, WIN=100000;
@@ -287,9 +288,11 @@ const LEVELS={
   2:{name:'Casual',       depth:2,  ms:350,  margin:2, pool:3, slip:0.35, about:'Looks 2 turns ahead and plays its best move about two times in three.'},
   3:{name:'Intermediate', depth:3,  ms:450,  margin:2, pool:2, slip:0.4,  about:'Looks 3 turns ahead and plays its best move more often than not.'},
   4:{name:'Advanced',     depth:4,  ms:700,  margin:2, pool:3, slip:0.3,  about:'Looks 4 turns ahead and plays its best move most of the time.'},
+  6:{name:'Neural network', about:''},
   5:{name:'Expert',       depth:12, ms:2200, margin:0, pool:1, slip:0,    about:'Searches as deep as it can in about 2 seconds a move and always plays its best.'},
 };
 function chooseMove(S,level){
+  if(level===6) return NN ? nnChoose(S) : chooseMove(S,5);
   const L=LEVELS[level];
   const {list}=rootSearch(S,L.depth,L.ms);
   const top=list[0][1];
@@ -304,6 +307,121 @@ function chooseMove(S,level){
     const h=S.hand[ix(S.toMove)]; if(!h[mv.v]) mv={...mv,v:preferredValue(h)};
   }
   return mv;
+}
+
+
+/* ================= level 6: the self-trained neural network =================
+   Same network and search as train.py (sq_net.py + sq_mcts.py), running in the browser.
+   The trained weights come from nn_weights.js, made by export_to_web.py. */
+const NN=(function(){
+  const W=window.NN_WEIGHTS; if(!W) return null;
+  function f16(b64){                       // weights are stored as 16-bit floats to keep the file small
+    const bin=atob(b64), n=bin.length>>1, out=new Float32Array(n);
+    for(let i=0;i<n;i++){
+      const h=bin.charCodeAt(2*i)|(bin.charCodeAt(2*i+1)<<8), sg=(h&0x8000)?-1:1, e=(h>>10)&31, f=h&1023;
+      out[i]= e===0 ? sg*f*Math.pow(2,-24) : (e===31 ? (f?NaN:sg*Infinity) : sg*Math.pow(2,e-15)*(1+f/1024));
+    }
+    return out;
+  }
+  const P={}; for(const k in W.params) P[k]=f16(W.params[k]);
+  return {P, cin:W.cin, ch:W.ch, L:W.layers, gen:W.gen};
+})();
+const NN_PLANES=28;
+function nnEncode(S){
+  const C=NN_PLANES, x=new Float32Array(25*C), p=S.toMove, me=ix(p), op=1-me, t=S.turn;
+  for(let q=0;q<25;q++){
+    const o=q*C, v=S.board[q]*p;
+    if(v>0) x[o+v-1]=1; else if(v<0) x[o+3-v]=1;
+    for(let k=1;k<=4;k++){ x[o+7+k]=S.hand[me][k]/2; x[o+11+k]=S.hand[op][k]/2; }
+    if(t<16) x[o+16]=1; else x[o+16+CYCLE[(t-16)%8][1]]=1;
+    if(t+1>=16) x[o+20+CYCLE[(t+1-16)%8][1]]=1;
+    x[o+25]=t/60; x[o+26]=1; x[o+27]=p===1?1:0;
+  }
+  return x;
+}
+function nnForward(x){
+  const P=NN.P, ch=NN.ch; let h=x, c=NN.cin;
+  for(let l=0;l<NN.L;l++){
+    const w=P['w'+l], b=P['b'+l], out=new Float32Array(25*ch);
+    for(let y=0;y<5;y++) for(let xx=0;xx<5;xx++){
+      const o=(y*5+xx)*ch;
+      for(let f=0;f<ch;f++) out[o+f]=b[f];
+      for(let dy=0;dy<3;dy++){ const iy=y+dy-1; if(iy<0||iy>4) continue;
+        for(let dx=0;dx<3;dx++){ const jx=xx+dx-1; if(jx<0||jx>4) continue;
+          const ip=(iy*5+jx)*c, wb=(dy*3+dx)*c;
+          for(let cc=0;cc<c;cc++){ const v=h[ip+cc]; if(v===0) continue; const wr=(wb+cc)*ch;
+            for(let f=0;f<ch;f++) out[o+f]+=v*w[wr+f]; } } }
+    }
+    if(l>0&&l%2===0) for(let i=0;i<out.length;i++) out[i]+=h[i];
+    for(let i=0;i<out.length;i++) if(out[i]<0) out[i]=0;
+    h=out; c=ch;
+  }
+  const logits=new Float32Array(150);
+  for(let q=0;q<25;q++) for(let k=0;k<6;k++){ let sm=P.bp[k]; for(let f=0;f<ch;f++) sm+=h[q*ch+f]*P.wp[f*6+k]; logits[k*25+q]=sm; }
+  const g=new Float32Array(2*ch);
+  for(let f=0;f<ch;f++){ let sm=0,m=-1e9; for(let q=0;q<25;q++){ const v=h[q*ch+f]; sm+=v; if(v>m) m=v; } g[f]=sm/25; g[ch+f]=m; }
+  let vs=P.bv2[0];
+  for(let k=0;k<64;k++){ let sm=P.bv1[k]; for(let j=0;j<2*ch;j++) sm+=g[j]*P.wv1[j*64+k]; if(sm>0) vs+=sm*P.wv2[k]; }
+  return {logits, v:Math.tanh(vs)};
+}
+/* actions are numbered as in training: 0-99 place value v on q ((v-1)*25+q); 100-149 move copy k to q */
+function nnDueFroms(S){ const [pl,v]=CYCLE[S.cycle]; const out=[]; for(let q=0;q<25;q++) if(S.board[q]===pl*v) out.push(q); return out; }
+function nnToMove(S,a){ if(a<100) return {t:'p',v:Math.floor(a/25)+1,to:a%25}; return {t:'m',from:nnDueFroms(S)[Math.floor((a-100)/25)],to:a%25}; }
+function nnLegal(S){
+  if(placing(S)) return genMoves(S,false).map(m=>(m.v-1)*25+m.to);
+  const fr=nnDueFroms(S); return genMoves(S,false).map(m=>100+fr.indexOf(m.from)*25+m.to);
+}
+function nnThreats(S,p,t){       // empty points where p could complete a square on turn t
+  const me=S.bits[ix(p)], op=S.bits[ix(-p)]; let a=-1,c=-1;
+  if(t>=16){ const v=CYCLE[(t-16)%8][1]; const fr=[]; for(let q=0;q<25;q++) if(S.board[q]===p*v) fr.push(q); a=fr[0]; c=fr[1]; }
+  const out=new Set();
+  for(const sq of SQ){ const m=sq.m; if(m&op) continue; if(pc(m&me)!==3) continue;
+    if(t<16 || !((m>>a)&1) || !((m>>c)&1)) out.add(sq.p.find(x=>!((me>>x)&1))); }
+  return out;
+}
+function nnNode(moves,P){ return {moves,P,N:new Float32Array(moves.length),W:new Float32Array(moves.length),ch:new Array(moves.length).fill(null)}; }
+function nnExpand(S){
+  let acts=null, known=null;
+  if(S.turn>=5){                  // rules-only lookahead: take a win, block a single threat, two threats lose
+    const p=S.toMove, w=nnThreats(S,p,S.turn);
+    if(w.size){ const win=[]; for(const a of nnLegal(S)) if(w.has(a%25)){ const u=make(S,nnToMove(S,a)); const ok=S.result===p; unmake(S,u); if(ok) win.push(a); }
+      if(win.length){ acts=win; known=1; } }
+    if(known===null && S.turn+1<MAXT){ const T=nnThreats(S,-p,S.turn+1);
+      if(T.size){ acts=nnLegal(S).filter(a=>T.has(a%25)); if(T.size>=2) known=-1; } }
+  }
+  if(known!==null){ if(!acts.length) acts=nnLegal(S); return {node:nnNode(acts,new Float32Array(acts.length).fill(1/acts.length)), v:known}; }
+  const legal=acts||nnLegal(S), {logits,v}=nnForward(nnEncode(S));
+  let mx=-1e9; for(const a of legal) if(logits[a]>mx) mx=logits[a];
+  const P=new Float32Array(legal.length); let sm=0;
+  legal.forEach((a,j)=>{ P[j]=Math.exp(logits[a]-mx); sm+=P[j]; });
+  for(let j=0;j<P.length;j++) P[j]/=sm;
+  return {node:nnNode(legal,P), v};
+}
+function nnSearch(S,maxSims,ms){
+  const deadline=performance.now()+ms, root=nnExpand(S).node;
+  for(let s=0;s<maxSims;s++){
+    const path=[], undo=[]; let node=root, leafV=0;
+    while(true){
+      let sN=0; for(let i=0;i<node.N.length;i++) sN+=node.N[i];
+      const sq=Math.sqrt(sN+1); let best=-1e9, bi=0;
+      for(let i=0;i<node.moves.length;i++){ const q=node.N[i]>0?node.W[i]/node.N[i]:0; const u=q+1.5*node.P[i]*sq/(1+node.N[i]); if(u>best){best=u;bi=i;} }
+      undo.push(make(S,nnToMove(S,node.moves[bi]))); path.push([node,bi]);
+      if(S.result!==null){ leafV=S.result===0?0:-1; break; }      // the player now to move has lost (or a draw)
+      const c=node.ch[bi];
+      if(!c){ const e=nnExpand(S); node.ch[bi]=e.node; leafV=e.v; break; }
+      node=c;
+    }
+    let v=-leafV;
+    for(let k=path.length-1;k>=0;k--){ const [nd,i]=path[k]; nd.N[i]+=1; nd.W[i]+=v; v=-v; }
+    for(let k=undo.length-1;k>=0;k--) unmake(S,undo[k]);
+    if(s>=40 && performance.now()>deadline) break;
+  }
+  return root;
+}
+function nnChoose(S){
+  const root=nnSearch(S,1600,2500);
+  let bi=0; for(let i=1;i<root.moves.length;i++) if(root.N[i]>root.N[bi]||(root.N[i]===root.N[bi]&&root.P[i]>root.P[bi])) bi=i;
+  return nnToMove(S,root.moves[bi]);
 }
 
 /* ================= UI ================= */
@@ -449,7 +567,13 @@ function seg(id,cb){const s=document.getElementById(id);
 seg('modeSeg',v=>{mode=v; showControls();});
 seg('sideSeg',v=>{human=+v;});
 seg('lvlSeg',v=>{level=+v; showLevel();});
-function showLevel(){ const L=LEVELS[level]; document.getElementById('lvlNote').textContent=`Level ${level}, ${L.name}: ${L.about}`; }
+function showLevel(){
+  const L=LEVELS[level];
+  LEVELS[6].about = NN ? `The network that taught itself by self-play (training generation ${NN.gen}). Thinks for about 2.5 seconds a move.`
+                       : 'Not available: upload nn_weights.js (made by export_to_web.py) next to index.html.';
+  document.getElementById('lvlNote').textContent=`Level ${level}, ${L.name}: ${L.about}`;
+}
+if(!NN){ const b=document.getElementById('lvl6btn'); b.disabled=true; b.title='Needs nn_weights.js'; }
 showLevel();
 document.getElementById('newGame').addEventListener('click',()=>{ if(mode==='online'){ if(onlineConfigured) createOnline(); } else newGame(); });
 document.getElementById('undo').addEventListener('click',undo);
